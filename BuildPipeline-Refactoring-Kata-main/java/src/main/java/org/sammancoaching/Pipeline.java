@@ -17,47 +17,68 @@ public class Pipeline {
     }
 
     public void run(Project project) {
-        boolean testsPassed;
-        boolean deploySuccessful;
+        // Fase 1: Execução de Testes
+        boolean testsPassed = executeTests(project);
 
-        if (project.hasTests()) {
-            if ("success".equals(project.runTests())) {
-                log.info("Tests passed");
-                testsPassed = true;
-            } else {
-                log.error("Tests failed");
-                testsPassed = false;
-            }
-        } else {
-            log.info("No tests");
-            testsPassed = true;
-        }
-
+        // Fase 2: Deployment (só ocorre se os testes passarem)
+        boolean deploySuccessful = false;
         if (testsPassed) {
-            if ("success".equals(project.deploy())) {
-                log.info("Deployment successful");
-                deploySuccessful = true;
-            } else {
-                log.error("Deployment failed");
-                deploySuccessful = false;
-            }
-        } else {
-            deploySuccessful = false;
+            deploySuccessful = executeDeployment(project);
         }
 
-        if (config.sendEmailSummary()) {
-            log.info("Sending email");
-            if (testsPassed) {
-                if (deploySuccessful) {
-                    emailer.send("Deployment completed successfully");
-                } else {
-                    emailer.send("Deployment failed");
-                }
-            } else {
-                emailer.send("Tests failed");
-            }
+        // Fase 3: Notificações
+        PipelineResult result = new PipelineResult(testsPassed, deploySuccessful);
+        handleNotifications(result);
+    }
+
+    private boolean executeTests(Project project) {
+        if (!project.hasTests()) {
+            log.info("No tests");
+            return true;
+        }
+
+        // Substituindo a comparação de String por um método mais expressivo
+        boolean success = "success".equals(project.runTests());
+
+        if (success) {
+            log.info("Tests passed");
         } else {
+            log.error("Tests failed");
+        }
+        return success;
+    }
+
+    private boolean executeDeployment(Project project) {
+        boolean success = "success".equals(project.deploy());
+
+        if (success) {
+            log.info("Deployment successful");
+        } else {
+            log.error("Deployment failed");
+        }
+        return success;
+    }
+
+    private void handleNotifications(PipelineResult result) {
+        if (!config.sendEmailSummary()) {
             log.info("Email disabled");
+            return;
+        }
+
+        log.info("Sending email");
+        sendEmailByResult(result);
+    }
+
+    private void sendEmailByResult(PipelineResult result) {
+        if (!result.areTestsPassed()) {
+            emailer.send("Tests failed");
+            return;
+        }
+
+        if (result.isDeploySuccessful()) {
+            emailer.send("Deployment completed successfully");
+        } else {
+            emailer.send("Deployment failed");
         }
     }
 }
